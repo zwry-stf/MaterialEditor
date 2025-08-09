@@ -5,14 +5,14 @@
 #include <assert.h>
 
 
-#define zyra_logging_enabled
+#define g_logging_enabled
 
 class log
 {
 public:
 	static void print(std::string format, ...)
 	{
-#ifdef zyra_logging_enabled
+#ifdef g_logging_enabled
 		va_list args;
 		va_start(args, format);
 
@@ -23,7 +23,7 @@ public:
 		va_end(args);
 
 		OutputDebugStringA(buffer);
-#endif // zyra_logging_enabled
+#endif // g_logging_enabled
 	}
 
 	template <class... types>

@@ -6,6 +6,20 @@
 #include <thread>
 
 
+void error(std::string format, ...)
+{
+	va_list args;
+	va_start(args, format);
+
+	format = "failed to init: " + format;
+
+	char buffer[512];
+	vsnprintf_s(buffer, sizeof(buffer), _TRUNCATE, format.c_str(), args);
+	va_end(args);
+
+	MessageBoxA(NULL, buffer, "Material editor | Error", MB_ICONERROR | MB_OK);
+}
+
 static void init()
 {
 #ifdef NDEBUG
@@ -17,9 +31,7 @@ static void init()
 	}
 	catch (const std::runtime_error& e)
 	{
-		MessageBoxA(NULL,
-			(std::string(_("failed to init material editor: ")) + e.what()).c_str(),
-			_("Material editor | Error"), MB_ICONERROR | MB_OK);
+		error("%s", e.what());
 
 		abort();
 	}
@@ -33,19 +45,17 @@ int APIENTRY DllMain(HMODULE, DWORD reason, LPVOID reserved)
 	{
 		std::thread t(init);
 		if (!t.joinable())
-			MessageBoxA(NULL,
-				"failed to create thread",
-				"Material editor | Error", MB_ICONERROR | MB_OK);
+		{
+			error("failed to create thread");
+
+			abort();
+		}
 		t.detach();
 	}
 	else if (reason == DLL_PROCESS_DETACH)
 	{
-#ifdef _DEBUG
 		if (reserved == NULL) // Unloading
 			base::destroy();
-#else
-		return FALSE;
-#endif
 	}
 
 	return TRUE;
