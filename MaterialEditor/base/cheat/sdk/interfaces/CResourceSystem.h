@@ -60,10 +60,13 @@ public:
             ("CreateMaterial");
 
         CKeyValues3* pKeyValues3 = CKeyValues3::createMaterialResource();
-        pKeyValues3->loadFromBuffer(szVmatBuffer);
+        if (!pKeyValues3->loadFromBuffer(szVmatBuffer))
+            return {};
 
         CStrongHandle<CMaterial2> pCustomMaterial = {};
-        oCreateMaterial(nullptr, &pCustomMaterial, szMaterialName, pKeyValues3, 0, 1);
+        void* ret = oCreateMaterial(nullptr, &pCustomMaterial, szMaterialName, pKeyValues3, 0, 1);
+        if (!ret)
+            return {};
 
         return pCustomMaterial;
     }

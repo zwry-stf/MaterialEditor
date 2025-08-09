@@ -335,6 +335,11 @@ void render::renderMenu()
     float half = (avail.x - pad) * 0.5f;
     float textHeight = ImGui::GetTextLineHeightWithSpacing();
 
+    // Error message values
+    static bool  showMatError = false;
+    static float matErrorTime = 0.0f;
+    static std::string matErrorMsg;
+
     // Left: Visible
     ImGui::BeginChild("##visible_child", ImVec2(half, 0), ImGuiChildFlags_Border);
     {
@@ -355,7 +360,12 @@ void render::renderMenu()
         static char visible_mat_name[256] = "materials/dev/primary_white.vmat";
         static std::string visible_mat = features::chams::default_material_visible;
         if (ImGui::Button("Update##vis"))
-            features::chams::reloadVisible(visible_mat_name, visible_mat);
+            if (!features::chams::reloadVisible(visible_mat_name, visible_mat))
+            {
+                showMatError = true;
+                matErrorTime = ImGui::GetTime();
+                matErrorMsg = "Failed to load visible material!";
+            }
 
         ImGui::InputText("Material", visible_mat_name, sizeof(visible_mat_name));
 
@@ -394,7 +404,12 @@ void render::renderMenu()
         static char invisible_mat_name[256] = "materials/dev/primary_white.vmat";
         static std::string invisible_mat = features::chams::default_material_invisible;
         if (ImGui::Button("Update##invis"))
-            features::chams::reloadInvisible(invisible_mat_name, invisible_mat);
+            if (!features::chams::reloadInvisible(invisible_mat_name, invisible_mat))
+            {
+                showMatError = true;
+                matErrorTime = ImGui::GetTime();
+                matErrorMsg = "Failed to load invisible material!";
+            }
 
         ImGui::InputText("Material", invisible_mat_name, sizeof(invisible_mat_name));
 
@@ -409,6 +424,34 @@ void render::renderMenu()
             ImGui::TextUnformatted(path.c_str());
     }
     ImGui::EndChild();
+
+    if (showMatError) 
+    {
+        float elapsed = ImGui::GetTime() - matErrorTime;
+        if (elapsed < 3.0f) // show for 3 seconds
+        {
+            ImGui::SetNextWindowBgAlpha(0.8f);
+            ImGui::Begin("##mat_error", nullptr,
+                ImGuiWindowFlags_NoDecoration |
+                ImGuiWindowFlags_AlwaysAutoResize |
+                ImGuiWindowFlags_NoNav |
+                ImGuiWindowFlags_NoMove);
+
+            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 80, 80, 255));
+            ImGui::TextUnformatted(matErrorMsg.c_str());
+            ImGui::PopStyleColor();
+
+            // position top-center
+            ImVec2 windowPos = ImVec2(
+                (ImGui::GetIO().DisplaySize.x - ImGui::GetWindowSize().x) * 0.5f,
+                20.0f
+            );
+            ImGui::SetWindowPos(windowPos);
+            ImGui::End();
+        }
+        else
+            showMatError = false;
+    }
 }
 
 void render::onToggleMenu(bool open)

@@ -20,11 +20,12 @@ public:
 	void* pValue;
 	MEM_PAD(0x8);
 
-	void loadFromBuffer(const char* szString)
+	bool loadFromBuffer(const char* szString)
 	{
 		CUtlBuffer buffer(0, static_cast<int>(strlen(szString)) + 10, 1);
 		buffer.putString(szString);
-		loadKV3(&buffer);
+
+		return loadKV3(&buffer);
 	}
 
 	bool loadKV3(CUtlBuffer* buffer)
