@@ -85,7 +85,7 @@ void signatures::addSigEx(const std::string& name, const std::string& module, co
 		log::println("failed to find signature '%s'", name.c_str());
 
 #ifdef NDEBUG
-		throw std::runtime_error(_("Failed to find signatures"));
+		throw std::runtime_error("Failed to find signatures");
 #else
 		failed = true;
 		return;
@@ -115,7 +115,7 @@ void signatures::addSigOffsetEx(const std::string& name, const std::string& modu
 		log::println("failed to find signature '%s'", name.c_str());
 
 #ifdef NDEBUG
-		throw std::runtime_error(_("Failed to find signatures"));
+		throw std::runtime_error("Failed to find signatures");
 #else
 		failed = true;
 		return;
