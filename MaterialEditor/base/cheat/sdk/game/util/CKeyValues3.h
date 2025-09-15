@@ -15,10 +15,7 @@ struct KV3ID_t
 class CKeyValues3
 {
 public:
-	MEM_PAD(0x100);
-	uint64_t uKey;
-	void* pValue;
-	MEM_PAD(0x8);
+	MEM_PAD(368);
 
 	bool loadFromBuffer(const char* szString)
 	{
@@ -38,13 +35,12 @@ public:
 		return oLoadKeyValues(this, nullptr, buffer, &kv3ID, nullptr, nullptr, nullptr, nullptr, "", 0);
 	}
 
-	static CKeyValues3* createMaterialResource()
+	bool create()
 	{
 		static auto oSetTypeKV3 = signatures::get<
 			CKeyValues3 * (__fastcall*)(CKeyValues3*, uint32_t, uint32_t)>
 			("SetTypeKV3");
 
-		CKeyValues3* pKeyValue = new CKeyValues3[0x10];
-		return oSetTypeKV3(pKeyValue, 1U, 6U);
+		return oSetTypeKV3(this, 1u, 6u) != nullptr;
 	}
 };

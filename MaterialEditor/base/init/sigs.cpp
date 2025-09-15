@@ -47,5 +47,5 @@ void signatures::addSignatures()
 	addSig("SetTypeKV3", "client.dll", s("E8 {} 48 8B 5E ? 41 8B 06"));
 
 	// CGameEntitySystem
-	addSig("GetEntityByIndex", "client.dll", s("E8 {} 48 85 C0 75 ? 44 8B 47"));
+	addSig("GetEntityByIndex", "client.dll", s("4C 8D 49 ? 81 FA"));
 }

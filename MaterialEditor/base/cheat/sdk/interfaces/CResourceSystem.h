@@ -21,17 +21,12 @@ public:
 
     uint32_t ResourceLoaded(CBufferString* buffer)
     {
-        return mem::CallVFunc<uint32_t, 54>(this, buffer);
-    }
-
-    void* getResourceInterface(uint64_t extension) const
-    {
-        return mem::CallVFunc<void*, 18>(this, extension);
+        return mem::CallVFunc<uint32_t, 55>(this, buffer);
     }
 
     ResourceBinding_t* getResource(CBufferString* buffer, uint64_t unk) const
     {
-        return mem::CallVFunc<ResourceBinding_t*, 30>(this, buffer, unk);
+        return mem::CallVFunc<ResourceBinding_t*, 80>(this, buffer, unk);
     }
 
     ResourceBinding_t* loadResource(CBufferString* buffer, const char* load_function = "")
@@ -59,12 +54,14 @@ public:
             void* (__fastcall*)(void*, void*, const char*, void*, unsigned int, unsigned int)>
             ("CreateMaterial");
 
-        CKeyValues3* pKeyValues3 = CKeyValues3::createMaterialResource();
-        if (!pKeyValues3->loadFromBuffer(szVmatBuffer))
+        CKeyValues3 key_values;
+        key_values.create();
+
+        if (!key_values.loadFromBuffer(szVmatBuffer))
             return {};
 
         CStrongHandle<CMaterial2> pCustomMaterial = {};
-        void* ret = oCreateMaterial(nullptr, &pCustomMaterial, szMaterialName, pKeyValues3, 0, 1);
+        void* ret = oCreateMaterial(nullptr, &pCustomMaterial, szMaterialName, &key_values, 0, 1);
         if (!ret)
             return {};
 

@@ -360,12 +360,7 @@ void render::renderMenu()
         static char visible_mat_name[256] = "materials/dev/primary_white.vmat";
         static std::string visible_mat = features::chams::default_material_visible;
         if (ImGui::Button("Update##vis"))
-            if (!features::chams::reloadVisible(visible_mat_name, visible_mat))
-            {
-                showMatError = true;
-                matErrorTime = ImGui::GetTime();
-                matErrorMsg = "Failed to load visible material!";
-            }
+            features::chams::reloadVisible(visible_mat_name, visible_mat);
 
         ImGui::InputText("Material", visible_mat_name, sizeof(visible_mat_name));
 
@@ -404,12 +399,7 @@ void render::renderMenu()
         static char invisible_mat_name[256] = "materials/dev/primary_white.vmat";
         static std::string invisible_mat = features::chams::default_material_invisible;
         if (ImGui::Button("Update##invis"))
-            if (!features::chams::reloadInvisible(invisible_mat_name, invisible_mat))
-            {
-                showMatError = true;
-                matErrorTime = ImGui::GetTime();
-                matErrorMsg = "Failed to load invisible material!";
-            }
+            features::chams::reloadInvisible(invisible_mat_name, invisible_mat);
 
         ImGui::InputText("Material", invisible_mat_name, sizeof(invisible_mat_name));
 
@@ -424,6 +414,14 @@ void render::renderMenu()
             ImGui::TextUnformatted(path.c_str());
     }
     ImGui::EndChild();
+
+    if (features::chams::error.pending.load(std::memory_order_acquire))
+    {
+        features::chams::error.pending.store(false, std::memory_order_relaxed);
+        showMatError = true;
+        matErrorTime = ImGui::GetTime();
+        matErrorMsg = features::chams::error.message;
+    }
 
     if (showMatError) 
     {

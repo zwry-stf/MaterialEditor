@@ -80,9 +80,23 @@ void features::chams::destroy()
 }
 
 #include <util/log.h>
-bool features::chams::reloadVisible(const std::string& mat_name, const std::string& mat_contents)
+void features::chams::reloadVisible(const std::string& mat_name, const std::string& mat_contents)
 {
-    auto ret = compile(mat_name, mat_contents);
+    m_PendingMatVisible = mat_name;
+    m_PendingMatSourceVisible = mat_contents;
+    m_PendingReloadVisible.store(true, std::memory_order_release);
+}
+
+void features::chams::reloadInvisible(const std::string& mat_name, const std::string& mat_contents)
+{
+    m_PendingMatInvisible = mat_name;
+    m_PendingMatSourceInvisible = mat_contents;
+    m_PendingReloadInvisible.store(true, std::memory_order_release);
+}
+
+bool features::chams::reloadVisible()
+{
+    auto ret = compile(m_PendingMatVisible, m_PendingMatSourceVisible);
     if (!ret.pBinding)
         return false;
 
@@ -91,31 +105,44 @@ bool features::chams::reloadVisible(const std::string& mat_name, const std::stri
         resetVisible();
     }
 
-    std::vector<CStrongHandle<CTextureDx11>> textures;
-    for (size_t pos = mat_contents.find("resource:\"");
-        pos != std::string::npos; pos = mat_contents.find("resource:\"", pos + 10))
+    std::vector<LoadedTexture> textures;
+    for (size_t pos = m_PendingMatSourceVisible.find("resource:\"");
+        pos != std::string::npos; pos = m_PendingMatSourceVisible.find("resource:\"", pos + 10))
     {
         size_t start = pos + 10;
-        size_t end = mat_contents.find(".vtex\"", start);
+        size_t end = m_PendingMatSourceVisible.find(".vtex\"", start);
         if (end == std::string::npos)
             return false;
 
         end += 5;
 
-        std::string path = mat_contents.substr(start, end - start);
+        std::string path = m_PendingMatSourceVisible.substr(start, end - start);
         CBufferString buffer(path.c_str(), BuildExtension("vtex"));
+        bool loaded = false;
         auto handle = interfaces::iResourceSystem->getResource(&buffer, 0LL);
-        if (!handle ||
-            !handle->pData)
+        if (handle &&
+            handle->pData)
+            loaded = true;
+        if (!loaded)
         {
-            handle = interfaces::iResourceSystem->loadResource(&buffer);
+            auto handle = interfaces::iResourceSystem->loadResource(&buffer);
             if (!handle)
                 log::printWarning("failed to load texture '%s', ignoring...", path.c_str());
             else
             {
-                textures.push_back(CStrongHandle<CTextureDx11>());
-                textures.back().pBinding = handle;
+                textures.emplace_back(CStrongHandle<CTextureDx11>(), true);
+                textures.back().tex.pBinding = handle;
             }
+        }
+        else
+        {
+            std::lock_guard<std::mutex> lock(m_DestroyMutex);
+            for (auto& tex : m_DestroyTextures)
+                if (tex.pBinding == handle)
+                {
+                    textures.emplace_back(CStrongHandle<CTextureDx11>(), false);
+                    textures.back().tex.pBinding = handle;
+                }
         }
     }
 
@@ -126,9 +153,9 @@ bool features::chams::reloadVisible(const std::string& mat_name, const std::stri
     return true;
 }
 
-bool features::chams::reloadInvisible(const std::string& mat_name, const std::string& mat_contents)
+bool features::chams::reloadInvisible()
 {
-    auto ret = compile(mat_name, mat_contents);
+    auto ret = compile(m_PendingMatInvisible, m_PendingMatSourceInvisible);
     if (!ret.pBinding)
         return false;
 
@@ -137,31 +164,44 @@ bool features::chams::reloadInvisible(const std::string& mat_name, const std::st
         resetInvisible();
     }
 
-    std::vector<CStrongHandle<CTextureDx11>> textures;
-    for (size_t pos = mat_contents.find("resource:\"");
-        pos != std::string::npos; pos = mat_contents.find("resource:\"", pos + 9))
+    std::vector<LoadedTexture> textures;
+    for (size_t pos = m_PendingMatSourceInvisible.find("resource:\"");
+        pos != std::string::npos; pos = m_PendingMatSourceInvisible.find("resource:\"", pos + 9))
     {
         size_t start = pos + 10;
-        size_t end = mat_contents.find(".vtex\"", start);
+        size_t end = m_PendingMatSourceInvisible.find(".vtex\"", start);
         if (end == std::string::npos)
             return false;
 
         end += 5;
 
-        std::string path = mat_contents.substr(start, end - start);
+        std::string path = m_PendingMatSourceInvisible.substr(start, end - start);
         CBufferString buffer(path.c_str(), BuildExtension("vtex"));
+        bool loaded = false;
         auto handle = interfaces::iResourceSystem->getResource(&buffer, 0LL);
-        if (!handle ||
-            !handle->pData)
+        if (handle &&
+            handle->pData)
+            loaded = true;
+        if (!loaded)
         {
-            handle = interfaces::iResourceSystem->loadResource(&buffer);
+            auto handle = interfaces::iResourceSystem->loadResource(&buffer);
             if (!handle)
                 log::printWarning("failed to load texture '%s', ignoring...", path.c_str());
             else
             {
-                textures.push_back(CStrongHandle<CTextureDx11>());
-                textures.back().pBinding = handle;
+                textures.emplace_back(CStrongHandle<CTextureDx11>(), true);
+                textures.back().tex.pBinding = handle;
             }
+        }
+        else
+        {
+            std::lock_guard<std::mutex> lock(m_DestroyMutex);
+            for (auto& tex : m_DestroyTextures)
+                if (tex.pBinding == handle)
+                {
+                    textures.emplace_back(CStrongHandle<CTextureDx11>(), false);
+                    textures.back().tex.pBinding = handle;
+                }
         }
     }
 
@@ -170,6 +210,54 @@ bool features::chams::reloadInvisible(const std::string& mat_name, const std::st
     m_CurrentMaterialInvisible.mat = ret;
 
     return true;
+}
+
+
+void __fastcall features::chams::hkFrameStageNotify(void* client, int frame_stage)
+{
+    static auto oFrameStageNotify = hooks::getOriginal<
+        void(__fastcall*)(void*, int)>
+        ("FrameStageNotify");
+
+    oFrameStageNotify(client, frame_stage);
+
+    {
+        std::lock_guard<std::mutex> lock(m_DestroyMutex);
+        for (auto it = m_DestroyTextures.begin(); it != m_DestroyTextures.end();)
+        {
+            if (it->pBinding->nRefCount == 0)
+            {
+                if (it->pBinding && 
+                    it->pBinding->pData)
+                    interfaces::iResourceHandleUtils->deleteResource(it->pBinding);
+                it = m_DestroyTextures.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+
+    if (m_PendingReloadVisible.load(std::memory_order_acquire))
+    {
+        m_PendingReloadVisible.store(false, std::memory_order_release);
+        if (!reloadVisible())
+        {
+            error.message = "Failed to load visible material";
+            error.pending.store(true, std::memory_order_release);
+        }
+    }
+
+    if (m_PendingReloadInvisible.load(std::memory_order_acquire))
+    {
+        m_PendingReloadInvisible.store(false, std::memory_order_release);
+        if (!reloadInvisible())
+        {
+            error.message = "Failed to load invisible material";
+            error.pending.store(true, std::memory_order_release);
+        }
+    }
 }
 
 bool __fastcall features::chams::hkDrawArray(CSceneAnimatableObjectDesc* desc, void* a2, CMeshDrawPrimitive_t* mesh_draw, int a4, void* a5, void* a6, void* a7)
@@ -242,14 +330,25 @@ void features::chams::resetVisible()
     if (m_CurrentMaterialVisible.mat.pBinding &&
         m_CurrentMaterialVisible.mat.pBinding != m_DefaultMaterialVisible.pBinding)
     {
+        assert(m_CurrentMaterialVisible.mat.pBinding->nRefCount == 0);
         interfaces::iResourceHandleUtils->deleteResource(m_CurrentMaterialVisible.mat.pBinding);
         m_CurrentMaterialVisible.mat.pBinding = nullptr;
     }
     for (auto& handle : m_CurrentMaterialVisible.loaded_textures)
-        if (handle.pBinding && handle.pBinding->pData)
+        if (handle.need_destroy &&
+            handle.tex.pBinding &&
+            handle.tex.pBinding->pData)
         {
-            interfaces::iResourceHandleUtils->deleteResource(handle.pBinding);
-            handle.pBinding = nullptr;
+            if (handle.tex.pBinding->nRefCount != 0)
+            {
+                std::lock_guard<std::mutex> lock(m_DestroyMutex);
+                m_DestroyTextures.push_back(handle.tex);
+            }
+            else
+            {
+                interfaces::iResourceHandleUtils->deleteResource(handle.tex.pBinding);
+                handle.tex.pBinding = nullptr;
+            }
         }
     m_CurrentMaterialVisible.loaded_textures.clear();
 }
@@ -259,14 +358,25 @@ void features::chams::resetInvisible()
     if (m_CurrentMaterialInvisible.mat.pBinding &&
         m_CurrentMaterialInvisible.mat.pBinding != m_DefaultMaterialInvisible.pBinding)
     {
+        assert(m_CurrentMaterialInvisible.mat.pBinding->nRefCount == 0);
         interfaces::iResourceHandleUtils->deleteResource(m_CurrentMaterialInvisible.mat.pBinding);
         m_CurrentMaterialInvisible.mat.pBinding = nullptr;
     }
     for (auto& handle : m_CurrentMaterialInvisible.loaded_textures)
-        if (handle.pBinding && handle.pBinding->pData)
+        if (handle.need_destroy &&
+            handle.tex.pBinding &&
+            handle.tex.pBinding->pData)
         {
-            interfaces::iResourceHandleUtils->deleteResource(handle.pBinding);
-            handle.pBinding = nullptr;
+            if (handle.tex.pBinding->nRefCount != 0)
+            {
+                std::lock_guard<std::mutex> lock(m_DestroyMutex);
+                m_DestroyTextures.push_back(handle.tex);
+            }
+            else
+            {
+                interfaces::iResourceHandleUtils->deleteResource(handle.tex.pBinding);
+                handle.tex.pBinding = nullptr;
+            }
         }
     m_CurrentMaterialInvisible.loaded_textures.clear();
 }
